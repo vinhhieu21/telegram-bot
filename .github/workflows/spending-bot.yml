@@ -1,0 +1,31 @@
+name: spending-bot
+
+on:
+  push:
+    branches: [main]
+    paths: ["apps/spending-bot/**", ".github/workflows/spending-bot.yml"]
+  pull_request:
+    paths: ["apps/spending-bot/**", ".github/workflows/spending-bot.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: apps/spending-bot
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/spending-bot/package-lock.json
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test

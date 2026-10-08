@@ -7,3 +7,8 @@ venv/
 .DS_Store
 *.egg-info/
 .pytest_cache/
+
+# spending-bot (Node / Cloudflare Workers)
+node_modules/
+.wrangler/
+.dev.vars

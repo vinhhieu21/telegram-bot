@@ -1,0 +1,24 @@
+name = "spending-bot"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+[observability]
+enabled = true
+
+[vars]
+# The group's chat id (negative number). Leave empty on first deploy, add the bot
+# to the group, read the id from `wrangler tail`, then set it and deploy again.
+ALLOWED_CHAT_ID = ""
+# Bot username without "@", used to match `/cmd@BotName`.
+BOT_USERNAME = ""
+
+[[d1_databases]]
+binding = "DB"
+database_name = "spending-bot-db"
+database_id = "REPLACE_WITH_ID_FROM_wrangler_d1_create"
+migrations_dir = "migrations"
+
+[triggers]
+# Cron runs in UTC; ICT = UTC+7.
+# 21:00 ICT daily recap, 09:00 ICT on the 1st monthly summary.
+crons = ["0 14 * * *", "0 2 1 * *"]

@@ -40,7 +40,7 @@ Get one free at https://aistudio.google.com/app/apikey.
 ### 3. Local test
 
 ```bash
-cd news-digest
+cd apps/news-digest
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env    # fill in 3 secrets
@@ -51,8 +51,7 @@ python -m src.main
 ### 4. Deploy to GitHub Actions
 
 ```bash
-git init && git add . && git commit -m "init news-digest"
-gh repo create news-digest --private --source=. --push
+# Workflow lives at the repo root: .github/workflows/digest.yml
 gh secret set GEMINI_API_KEY --body "$GEMINI_API_KEY"
 gh secret set TELEGRAM_BOT_TOKEN --body "$TELEGRAM_BOT_TOKEN"
 gh secret set TELEGRAM_CHAT_ID --body "$TELEGRAM_CHAT_ID"

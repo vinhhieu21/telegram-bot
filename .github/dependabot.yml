@@ -9,9 +9,17 @@ updates:
         patterns: ["*"]
 
   - package-ecosystem: pip
-    directory: /
+    directory: /apps/news-digest
     schedule:
       interval: weekly
     groups:
       pip:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /apps/spending-bot
+    schedule:
+      interval: weekly
+    groups:
+      npm:
         patterns: ["*"]

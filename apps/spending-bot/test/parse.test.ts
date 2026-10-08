@@ -1,0 +1,89 @@
+import { describe, expect, it } from "vitest";
+import { parseAdd } from "../src/parse/add";
+import { parseAmount } from "../src/parse/amount";
+import { extractDate } from "../src/parse/date";
+
+const TODAY = "2026-10-08";
+
+describe("parseAdd: plan's Parsing test table", () => {
+  it.each([
+    ["50k cafe sáng", 50_000, "cafe sáng", TODAY],
+    ["32.5k grab", 32_500, "grab", TODAY],
+    ["1tr2 tiền nhà", 1_200_000, "tiền nhà", TODAY],
+    ["1tr25 sửa xe", 1_250_000, "sửa xe", TODAY],
+    ["1.5tr", 1_500_000, "", TODAY],
+    ["1.250.000 điện", 1_250_000, "điện", TODAY],
+    ["45k cafe hôm qua", 45_000, "cafe", "2026-10-07"],
+    ["120k lẩu 05/10", 120_000, "lẩu", "2026-10-05"],
+  ])("%s", (input, amount, note, spentOn) => {
+    expect(parseAdd(input, TODAY)).toEqual({ ok: true, amount, note, spentOn });
+  });
+
+  it.each([
+    ["50 cafe", "needs_unit"],
+    ["cafe 50k", "invalid"],
+    ["abc", "invalid"],
+    ["", "missing"],
+  ])("rejects %j", (input, reason) => {
+    expect(parseAdd(input, TODAY)).toEqual({ ok: false, reason });
+  });
+});
+
+describe("parseAmount", () => {
+  it.each([
+    ["50K", 50_000],
+    ["32,5k", 32_500],
+    ["50nghìn", 50_000],
+    ["50ngàn", 50_000],
+    ["1tr", 1_000_000],
+    ["1triệu", 1_000_000],
+    ["2m", 2_000_000],
+    ["1tr250", 1_250_000],
+    ["50.000", 50_000],
+    ["50,000", 50_000],
+    ["50000", 50_000],
+    ["1000", 1_000],
+    ["100tr", 100_000_000],
+  ])("%s = %d", (token, amount) => {
+    expect(parseAmount(token)).toEqual({ ok: true, amount });
+  });
+
+  it.each([
+    ["999", "needs_unit"],
+    ["0.5k", "out_of_range"],
+    ["101tr", "out_of_range"],
+    ["1.2345k", "invalid"],
+    ["50x", "invalid"],
+    ["5.0.0", "invalid"],
+    ["-50k", "invalid"],
+  ])("rejects %s (%s)", (token, reason) => {
+    expect(parseAmount(token)).toEqual({ ok: false, reason });
+  });
+});
+
+describe("extractDate", () => {
+  it("accepts unaccented and short forms of yesterday", () => {
+    expect(extractDate("hom qua cafe", TODAY)).toEqual({ ok: true, spentOn: "2026-10-07", note: "cafe" });
+    expect(extractDate("bún HQUA", TODAY)).toEqual({ ok: true, spentOn: "2026-10-07", note: "bún" });
+  });
+
+  it("uses last year for a dd/mm in the future", () => {
+    expect(extractDate("vé 20/12", TODAY)).toEqual({ ok: true, spentOn: "2025-12-20", note: "vé" });
+  });
+
+  it("accepts today as dd/mm", () => {
+    expect(extractDate("8/10", TODAY)).toEqual({ ok: true, spentOn: TODAY, note: "" });
+  });
+
+  it("rejects impossible dates", () => {
+    expect(extractDate("31/02", TODAY)).toEqual({ ok: false, reason: "invalid_date" });
+  });
+
+  it("crosses month and year boundaries for yesterday", () => {
+    expect(extractDate("hôm qua", "2026-01-01")).toEqual({ ok: true, spentOn: "2025-12-31", note: "" });
+  });
+
+  it("does not treat words containing qua as a date", () => {
+    expect(extractDate("hoa quả", TODAY)).toEqual({ ok: true, spentOn: TODAY, note: "hoa quả" });
+  });
+});
