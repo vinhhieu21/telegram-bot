@@ -12,3 +12,6 @@ venv/
 node_modules/
 .wrangler/
 .dev.vars
+
+# Claude Code local settings
+.claude/settings.local.json
