@@ -23,3 +23,7 @@ updates:
     groups:
       npm:
         patterns: ["*"]
+    ignore:
+      # @cloudflare/vitest-plugin only supports vitest 4; drop once it supports 5.
+      - dependency-name: vitest
+        update-types: ["version-update:semver-major"]
