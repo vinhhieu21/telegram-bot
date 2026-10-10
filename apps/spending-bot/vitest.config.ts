@@ -7,6 +7,8 @@ export default defineConfig(async () => {
     plugins: [
       cloudflareTest({
         wrangler: { configPath: "./wrangler.toml" },
+        // Workers AI has no local simulator; tests stub env.AI.run instead of calling Cloudflare.
+        remoteBindings: false,
         miniflare: {
           bindings: {
             TEST_MIGRATIONS: migrations,

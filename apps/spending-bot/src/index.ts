@@ -1,5 +1,6 @@
 // fetch() = Telegram webhook, scheduled() = cron jobs.
 
+import { createLlm } from "./ai/llm";
 import { markUpdateProcessed } from "./db";
 import { runDailyJob } from "./jobs/daily";
 import { runMonthlyJob } from "./jobs/monthly";
@@ -10,7 +11,7 @@ export const DAILY_CRON = "0 14 * * *";
 export const MONTHLY_CRON = "0 2 1 * *";
 
 export default {
-  async fetch(request, env): Promise<Response> {
+  async fetch(request, env, ctx): Promise<Response> {
     if (request.method !== "POST") return new Response("Not found", { status: 404 });
     if (!timingSafeEqual(request.headers.get("X-Telegram-Bot-Api-Secret-Token") ?? "", env.WEBHOOK_SECRET)) {
       return new Response("Unauthorized", { status: 401 });
@@ -29,6 +30,9 @@ export default {
         allowedChatId: parseChatId(env.ALLOWED_CHAT_ID),
         botUsername: env.BOT_USERNAME,
         now,
+        llm: createLlm(env),
+        defer: (task) =>
+          ctx.waitUntil(task().catch((err: unknown) => console.error("background task failed", err))),
       });
     } catch (err) {
       console.error("webhook failed", err);
@@ -44,10 +48,11 @@ export default {
     }
     const tg = new Telegram(env.BOT_TOKEN);
     const now = new Date(controller.scheduledTime);
+    const llm = createLlm(env);
 
     try {
-      if (controller.cron === DAILY_CRON) await runDailyJob(env.DB, tg, chatId, now);
-      else if (controller.cron === MONTHLY_CRON) await runMonthlyJob(env.DB, tg, chatId, now);
+      if (controller.cron === DAILY_CRON) await runDailyJob(env.DB, tg, chatId, now, llm);
+      else if (controller.cron === MONTHLY_CRON) await runMonthlyJob(env.DB, tg, chatId, now, llm);
       else console.warn("unknown cron", controller.cron);
     } catch (err) {
       console.error(`cron ${controller.cron} failed`, err);

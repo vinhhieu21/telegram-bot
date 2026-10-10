@@ -1,5 +1,6 @@
 // Chat filtering, `/cmd@BotName` stripping and command dispatch.
 
+import type { Llm } from "./ai/llm";
 import { add } from "./commands/add";
 import { check } from "./commands/check";
 import type { CommandHandler } from "./commands/context";
@@ -20,6 +21,8 @@ export interface RouterDeps {
   allowedChatId: number | null;
   botUsername: string;
   now: Date;
+  llm: Llm | null;
+  defer: (task: () => Promise<unknown>) => void;
 }
 
 export interface ParsedCommand {
@@ -83,7 +86,7 @@ async function handleMessage(message: TgMessage, deps: RouterDeps): Promise<void
 
   try {
     await upsertMember(deps.db, user, deps.now.toISOString());
-    await handler({ db: deps.db, tg: deps.tg, chatId: chat.id, message, user, args: command.args, now: deps.now });
+    await handler({ db: deps.db, tg: deps.tg, chatId: chat.id, message, user, args: command.args, now: deps.now, llm: deps.llm, defer: deps.defer });
   } catch (err) {
     console.error(`command /${command.name} failed`, err);
     await deps.tg.sendMessage(chat.id, GENERIC_ERROR, message.message_id);

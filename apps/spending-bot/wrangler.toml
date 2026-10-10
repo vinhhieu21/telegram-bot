@@ -11,6 +11,14 @@ enabled = true
 ALLOWED_CHAT_ID = ""
 # Bot username without "@", used to match `/cmd@BotName`.
 BOT_USERNAME = ""
+# Workers AI model for expense categories and the monthly commentary. Empty = no LLM;
+# the bot then works exactly as before, minus those two features.
+LLM_MODEL = "@cf/aisingapore/gemma-sea-lion-v4-27b-it"
+
+# Workers AI. Free plan: a daily allowance, after which calls fail (no charge) and the
+# bot falls back: categories are retried by the next daily cron, commentary is skipped.
+[ai]
+binding = "AI"
 
 [[d1_databases]]
 binding = "DB"

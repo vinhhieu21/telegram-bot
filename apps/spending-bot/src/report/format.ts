@@ -1,6 +1,7 @@
 // VND formatting, HTML escaping and all user-facing message templates (Vietnamese).
 // Every function here is pure; callers pass in data already read from D1.
 
+import { categoryLabel } from "../ai/categories";
 import { formatDayMonth, type YearMonth } from "../time";
 
 export interface MemberName {
@@ -13,6 +14,12 @@ export interface MemberTotal extends MemberName {
   total: number;
   count: number;
   max_amount: number;
+}
+
+export interface CategoryTotal {
+  /** A key from ai/categories.ts, or null when not categorised yet. */
+  category: string | null;
+  total: number;
 }
 
 export interface ExpenseView {
@@ -34,14 +41,20 @@ export function escapeHtml(text: string): string {
 
 /** First name, plus last name for members whose first name is shared within `members`. Escaped. */
 export function displayNames(members: MemberName[]): Map<number, string> {
+  const names = plainDisplayNames(members);
+  for (const [id, name] of names) names.set(id, escapeHtml(name));
+  return names;
+}
+
+/** Same as displayNames, unescaped (for LLM input). */
+export function plainDisplayNames(members: MemberName[]): Map<number, string> {
   const firstNameCounts = new Map<string, number>();
   for (const m of members) firstNameCounts.set(m.first_name, (firstNameCounts.get(m.first_name) ?? 0) + 1);
 
   const names = new Map<number, string>();
   for (const m of members) {
     const shared = (firstNameCounts.get(m.first_name) ?? 0) > 1;
-    const name = shared && m.last_name ? `${m.first_name} ${m.last_name}` : m.first_name;
-    names.set(m.user_id, escapeHtml(name));
+    names.set(m.user_id, shared && m.last_name ? `${m.first_name} ${m.last_name}` : m.first_name);
   }
   return names;
 }
@@ -87,18 +100,36 @@ export function summaryMessage(opts: {
   month: YearMonth;
   members: MemberTotal[];
   previousTotal: number;
+  categories?: CategoryTotal[];
+  previousCategories?: CategoryTotal[];
+  /** undefined = not requested; null = requested but unavailable (said so in the message). */
+  commentary?: string | null;
 }): string {
-  const { month, members, previousTotal } = opts;
+  const { month, members, previousTotal, categories = [], previousCategories = [], commentary } = opts;
   const header = `<b>Tổng kết tháng ${month.month}/${month.year}</b>`;
   if (members.length === 0) return `${header}\nKhông có khoản chi nào.`;
 
   const total = members.reduce((sum, m) => sum + m.total, 0);
   const prev = month.month === 1 ? 12 : month.month - 1;
-  return [
+  const lines = [
     header,
     ...rankedLines(members, (m) => `${formatVnd(m.total)} (${m.count} lần, lớn nhất ${formatVnd(m.max_amount)})`),
     `Cả nhóm: ${formatVnd(total)} · so với tháng ${prev}: ${percentChange(total, previousTotal)}`,
-  ].join("\n");
+  ];
+
+  // Skip the section while nothing is categorised (e.g. LLM disabled).
+  if (categories.some((c) => c.category !== null)) {
+    const previousByKey = new Map(previousCategories.map((c) => [c.category, c.total]));
+    lines.push("", "<b>Theo loại</b>");
+    for (const c of categories) {
+      const change = c.category === null ? "—" : percentChange(c.total, previousByKey.get(c.category) ?? 0);
+      lines.push(`${categoryLabel(c.category)}: ${formatVnd(c.total)}${change === "—" ? "" : ` (${change})`}`);
+    }
+  }
+
+  if (commentary) lines.push("", "<b>Nhận xét</b>", escapeHtml(commentary));
+  else if (commentary === null) lines.push("", "<i>Không tạo được nhận xét tháng này.</i>");
+  return lines.join("\n");
 }
 
 export function dailyRecapMessage(opts: {

@@ -1,6 +1,6 @@
 // All SQL lives here. Every expense query filters `deleted_at IS NULL`.
 
-import type { ExpenseView, MemberTotal } from "./report/format";
+import type { CategoryTotal, ExpenseView, MemberTotal } from "./report/format";
 import type { TgUser } from "./telegram";
 
 export interface NewExpense {
@@ -104,6 +104,70 @@ export async function memberTotals(db: D1Database, chatId: number, from: string,
     .bind(chatId, from, to)
     .all<MemberTotal>();
   return results;
+}
+
+/** Per-category totals for a date range, highest first. `category` is null for uncategorised expenses. */
+export async function categoryTotals(db: D1Database, chatId: number, from: string, to: string): Promise<CategoryTotal[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT category, SUM(amount) AS total FROM expenses
+       WHERE chat_id = ? AND spent_on BETWEEN ? AND ? AND deleted_at IS NULL
+       GROUP BY category
+       ORDER BY total DESC, category`,
+    )
+    .bind(chatId, from, to)
+    .all<CategoryTotal>();
+  return results;
+}
+
+/** Oldest live expenses without a category. */
+export async function pendingCategorization(
+  db: D1Database,
+  chatId: number,
+  limit: number,
+): Promise<{ id: number; note: string }[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT id, note FROM expenses
+       WHERE chat_id = ? AND category IS NULL AND deleted_at IS NULL
+       ORDER BY id LIMIT ?`,
+    )
+    .bind(chatId, limit)
+    .all<{ id: number; note: string }>();
+  return results;
+}
+
+/** Cached categories for normalised notes. At most ~99 keys per call (D1 parameter limit). */
+export async function cachedCategories(db: D1Database, noteKeys: string[]): Promise<Map<string, string>> {
+  if (noteKeys.length === 0) return new Map();
+  const { results } = await db
+    .prepare(`SELECT note_key, category FROM note_categories WHERE note_key IN (${noteKeys.map(() => "?").join(", ")})`)
+    .bind(...noteKeys)
+    .all<{ note_key: string; category: string }>();
+  return new Map(results.map((r) => [r.note_key, r.category]));
+}
+
+/** Caches new note categories and sets expense categories, in one round trip. */
+export async function saveCategories(
+  db: D1Database,
+  learned: Map<string, string>,
+  updates: { id: number; category: string }[],
+  nowIso: string,
+): Promise<void> {
+  const statements = [
+    ...[...learned].map(([key, category]) =>
+      db
+        .prepare(
+          `INSERT INTO note_categories (note_key, category, updated_at) VALUES (?, ?, ?)
+           ON CONFLICT (note_key) DO UPDATE SET category = excluded.category, updated_at = excluded.updated_at`,
+        )
+        .bind(key, category, nowIso),
+    ),
+    ...updates.map((u) =>
+      db.prepare("UPDATE expenses SET category = ? WHERE id = ? AND category IS NULL").bind(u.category, u.id),
+    ),
+  ];
+  if (statements.length > 0) await db.batch(statements);
 }
 
 export async function getDailyEnabled(db: D1Database, chatId: number): Promise<boolean> {

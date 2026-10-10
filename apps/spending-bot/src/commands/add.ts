@@ -1,3 +1,4 @@
+import { categorizePending } from "../ai/categorize";
 import { insertExpense, userTotal } from "../db";
 import { parseAdd } from "../parse/add";
 import { ADD_ERRORS, addedMessage } from "../report/format";
@@ -38,4 +39,11 @@ export async function add(ctx: CommandContext): Promise<void> {
       monthTotal,
     }),
   );
+
+  // After the reply, so the LLM never delays it. Picks up this expense plus any earlier misses.
+  const { llm } = ctx;
+  if (llm) {
+    const nowIso = ctx.now.toISOString();
+    ctx.defer(() => categorizePending(ctx.db, llm, ctx.chatId, nowIso));
+  }
 }
