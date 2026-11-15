@@ -236,6 +236,14 @@ export function sheetRecoveredMessage(url: string): string {
   return `<a href="${escapeHtml(url)}">Google Sheets</a> đã cập nhật lại bình thường.`;
 }
 
+/** The admin's DM, where the Sheet alerts arrive, gets this instead of DM_NOTICE. */
+export function adminDmMessage(url: string): string {
+  return (
+    `Bot sẽ nhắn bạn ở đây khi <a href="${escapeHtml(url)}">Google Sheets</a> không cập nhật được, và khi cập nhật lại. ` +
+    "Các lệnh chi tiêu chỉ dùng trong nhóm."
+  );
+}
+
 export function dailyRecapMessage(opts: {
   today: string;
   members: MemberTotal[];

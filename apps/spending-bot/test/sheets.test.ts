@@ -686,6 +686,27 @@ describe("failures", () => {
     expect(adminMessages()[0]).toContain("Từ 08/10, bot không ghi được");
   });
 
+  it("are what the admin's DM is for: /start there says so, while anyone else gets the group-only notice", async () => {
+    const adminUser: TgUser = { id: ADMIN, is_bot: false, first_name: "Admin" };
+    const dm = (from: TgUser): TgUpdate => ({
+      update_id: nextUpdateId++,
+      message: { message_id: 1, from, chat: { id: from.id, type: "private" }, date: Math.floor(Date.now() / 1000), text: "/start" },
+    });
+    await post(dm(adminUser));
+    await post(dm(AN));
+
+    expect(messages).toEqual([
+      {
+        chat_id: ADMIN,
+        text:
+          `Bot sẽ nhắn bạn ở đây khi <a href="${SHEET_URL}">Google Sheets</a> không cập nhật được, và khi cập nhật lại. ` +
+          "Các lệnh chi tiêu chỉ dùng trong nhóm.",
+      },
+      { chat_id: AN.id, text: "Bot này chỉ hoạt động trong nhóm." },
+    ]);
+    expect(googleCalls()).toEqual([]);
+  });
+
   it("are only logged without ADMIN_USER_ID", async () => {
     testEnv = { ...testEnv, ADMIN_USER_ID: "" };
     sheetsDown = PERMISSION_DENIED;

@@ -123,6 +123,7 @@ Keep notes or charts in a tab of your own instead.
 4. Put the spreadsheet id, the part of its URL between `/d/` and `/edit`, in `GOOGLE_SHEET_ID` in `wrangler.toml`.
 5. Run `npx wrangler secret put GOOGLE_SERVICE_ACCOUNT_KEY < key.json`, then delete `key.json`.
 6. Optional: put your numeric Telegram user id (ask @userinfobot) in `ADMIN_USER_ID` in `wrangler.toml`, then press **Start** in a private chat with the bot.
+   The bot replies that this is where its Sheet alerts go; anyone else who messages it privately is told it only works in the group.
    When the nightly run cannot update the Sheet, the bot tells you there, and tells you again once it works.
 7. Deploy as usual.
    The first command or nightly run afterwards writes the tabs of the existing months, up to 12 per run.

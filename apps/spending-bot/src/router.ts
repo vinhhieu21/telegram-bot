@@ -11,7 +11,8 @@ import { help } from "./commands/help";
 import { groupSummary, summary } from "./commands/summary";
 import { undo } from "./commands/undo";
 import { upsertMember } from "./db";
-import { DM_NOTICE, GENERIC_ERROR } from "./report/format";
+import { adminDmMessage, DM_NOTICE, GENERIC_ERROR } from "./report/format";
+import { spreadsheetUrl } from "./sheets/google";
 import { syncSheet, type SheetConfig } from "./sheets/sync";
 import type { Telegram, TgChat, TgMessage, TgUpdate } from "./telegram";
 
@@ -85,7 +86,10 @@ async function handleMessage(message: TgMessage, deps: RouterDeps, edited: boole
   const { chat } = message;
 
   if (chat.type === "private") {
-    if (!edited) await deps.tg.sendMessage(chat.id, DM_NOTICE); // already told when the message was sent
+    if (edited) return; // already answered when the message was sent
+    const { sheet } = deps;
+    const isAdmin = sheet !== null && sheet.adminUserId === message.from?.id;
+    await deps.tg.sendMessage(chat.id, isAdmin ? adminDmMessage(spreadsheetUrl(sheet.spreadsheetId)) : DM_NOTICE);
     return;
   }
   if (deps.allowedChatId === null) {
