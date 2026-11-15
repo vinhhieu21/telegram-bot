@@ -19,7 +19,7 @@ LLM_MODEL = "@cf/aisingapore/gemma-sea-lion-v4-27b-it"
 GOOGLE_SHEET_ID = "1R_qQAc6deV-0w3Ka7qhtZlA9Jt-MNjKMzYq3aV59eTQ"
 # Telegram user id the bot tells when the Sheet stops updating, and when it recovers.
 # They must have pressed Start in a private chat with the bot. Empty = failures are only logged.
-ADMIN_USER_ID = ""
+ADMIN_USER_ID = "1065060927"
 
 # Workers AI. Free plan: a daily allowance, after which calls fail (no charge) and the
 # bot falls back: categories are retried by the next daily cron, commentary is skipped.
