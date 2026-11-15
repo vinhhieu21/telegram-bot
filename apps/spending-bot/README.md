@@ -1,6 +1,9 @@
 # Telegram Spending Bot (v1)
 
-A Telegram bot for one friend group. Members log spending with `/add`, check their own totals with `/check` and `/summary` (or the whole group's with `/groupcheck` and `/groupsummary`), and get an automatic monthly summary. A nightly recap is optional. It runs on one Cloudflare Worker with D1 storage and costs nothing on the free tiers.
+A Telegram bot for one friend group.
+Members log spending with `/add`, check their own totals with `/check` and `/summary` (or the whole group's with `/groupcheck` and `/groupsummary`), and get an automatic monthly summary.
+A nightly recap is optional, and so is a Google Sheet with one tab per month.
+It runs on one Cloudflare Worker with D1 storage and costs nothing on the free tiers.
 
 | Command | Example | What it does |
 |---|---|---|
@@ -26,6 +29,7 @@ wrangler.toml            D1 binding "DB", cron triggers, vars
 migrations/*.sql
 src/
   index.ts               fetch() = webhook, scheduled() = cron
+  crons.ts               the cron schedules scheduled() dispatches on
   router.ts              chat filter, /cmd@Bot stripping, dispatch
   telegram.ts            sendMessage / leaveChat over fetch
   db.ts                  all SQL
@@ -38,6 +42,9 @@ src/
   ai/categories.ts       the fixed category list
   ai/categorize.ts       note -> category, cached per note in note_categories
   ai/commentary.ts       monthly commentary, checked against the SQL numbers
+  sheets/google.ts       Google Sheets API client (service-account sign-in, retries)
+  sheets/tab.ts          one month's expenses -> its tab's cells and layout
+  sheets/sync.ts         which month tabs are behind, leases, failure alerts
 scripts/setup-telegram.mjs   setWebhook + setMyCommands
 test/                    Vitest (unit + integration on local D1)
 ```
@@ -90,6 +97,49 @@ Two features use [Workers AI](https://developers.cloudflare.com/workers-ai/) thr
 The model is `LLM_MODEL` in `wrangler.toml` (default: `@cf/aisingapore/gemma-sea-lion-v4-27b-it`, a model tuned for Southeast Asian languages). Set it to `""` to switch both features off. Expense notes, member first names and totals are sent to Workers AI.
 
 Tests stub `env.AI.run` (`remoteBindings: false` in `vitest.config.ts`), so they need no Cloudflare account. `wrangler dev` calls the real Workers AI and needs `wrangler login`.
+
+## Google Sheets sync (optional)
+
+The bot can keep a Google Sheet with one tab per month, named like `2026-10`, so members can browse, filter and download their spending.
+Each tab lists the month's expenses (date, member, amount, category, note), sorted by member and then by date.
+Next to them are each member's total and number of expenses, largest total first, and the group's total.
+The monthly summary ends with a link to the month's tab.
+
+The tabs follow D1, never the other way round.
+After a command, once the reply is sent, the bot rewrites the tab of every month whose expenses changed, including through edits, `/undo` and a member's new name.
+The nightly cron at 21:00 ICT does the same for anything still behind.
+New month tabs go newest first, after any tabs you made yourself.
+Every tab named `YYYY-MM` belongs to the bot, even one you created: the bot takes it over and overwrites it when that month changes.
+Tabs with any other name are left alone.
+Its tabs are protected with a warning, because an edit made in them is overwritten the next time that month changes.
+Keep notes or charts in a tab of your own instead.
+
+### Setup
+
+1. In the [Google Cloud console](https://console.cloud.google.com/), create a project, enable the **Google Sheets API**, and create a service account without roles.
+   Create a JSON key for it.
+2. Create the spreadsheet with your own Google account and share it with the service account's `client_email` as **Editor**.
+3. Set the spreadsheet's **General access** to **Anyone with the link** as **Viewer**, so members can open the links the bot posts.
+4. Put the spreadsheet id, the part of its URL between `/d/` and `/edit`, in `GOOGLE_SHEET_ID` in `wrangler.toml`.
+5. Run `npx wrangler secret put GOOGLE_SERVICE_ACCOUNT_KEY < key.json`, then delete `key.json`.
+6. Optional: put your numeric Telegram user id (ask @userinfobot) in `ADMIN_USER_ID` in `wrangler.toml`, then press **Start** in a private chat with the bot.
+   When the nightly run cannot update the Sheet, the bot tells you there, and tells you again once it works.
+7. Deploy as usual.
+   The first command or nightly run afterwards writes the tabs of the existing months, up to 12 per run.
+
+### Behaviour
+
+- When Google fails, for example because the Sheet is no longer shared with the service account, the month stays marked as behind and the next command or nightly run tries again.
+  Brief Google errors (429 and 5xx) are also retried on the spot, twice.
+- The admin gets one message per outage, with Google's error, and one when it is over.
+  Without `ADMIN_USER_ID`, failures only appear in the Worker log (`npx wrangler tail`).
+- When a month's tab is still behind at the monthly summary, the summary says so instead of linking to it.
+- A month tab that someone deleted comes back with the next change to that month.
+  To rewrite every tab now, for example after changing the layout in `src/sheets/tab.ts`, run `npx wrangler d1 execute spending-bot-db --remote --command "UPDATE sheet_sync SET version = version + 1"` and then send any command in the group.
+- Member names, dates, amounts, notes and categories are sent to Google.
+- Set `GOOGLE_SHEET_ID = ""` to switch the sync off.
+- Tests talk to a fake Google (`test/sheets.test.ts`), and `vitest.config.ts` blanks the Sheets settings, so tests never see the real key.
+  `wrangler dev` reads the key from `.dev.vars` (see `.dev.vars.example`) and writes to the real Sheet, unless you pass `--var GOOGLE_SHEET_ID:<id of a copy>`.
 
 ## Behaviour notes
 

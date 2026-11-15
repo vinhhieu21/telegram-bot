@@ -1,14 +1,13 @@
 // fetch() = Telegram webhook, scheduled() = cron jobs.
 
 import { createLlm } from "./ai/llm";
+import { DAILY_CRON, MONTHLY_CRON } from "./crons";
 import { markUpdateProcessed } from "./db";
 import { runDailyJob } from "./jobs/daily";
 import { runMonthlyJob } from "./jobs/monthly";
 import { handleUpdate } from "./router";
+import { sheetConfig } from "./sheets/sync";
 import { Telegram, type TgUpdate } from "./telegram";
-
-export const DAILY_CRON = "0 14 * * *";
-export const MONTHLY_CRON = "0 2 1 * *";
 
 export default {
   async fetch(request, env, ctx): Promise<Response> {
@@ -31,6 +30,7 @@ export default {
         botUsername: env.BOT_USERNAME,
         now,
         llm: createLlm(env),
+        sheet: sheetConfig(env),
         defer: (task) =>
           ctx.waitUntil(task().catch((err: unknown) => console.error("background task failed", err))),
       });
@@ -49,10 +49,11 @@ export default {
     const tg = new Telegram(env.BOT_TOKEN);
     const now = new Date(controller.scheduledTime);
     const llm = createLlm(env);
+    const sheet = sheetConfig(env);
 
     try {
-      if (controller.cron === DAILY_CRON) await runDailyJob(env.DB, tg, chatId, now, llm);
-      else if (controller.cron === MONTHLY_CRON) await runMonthlyJob(env.DB, tg, chatId, now, llm);
+      if (controller.cron === DAILY_CRON) await runDailyJob(env.DB, tg, chatId, now, llm, sheet);
+      else if (controller.cron === MONTHLY_CRON) await runMonthlyJob(env.DB, tg, chatId, now, llm, sheet);
       else console.warn("unknown cron", controller.cron);
     } catch (err) {
       console.error(`cron ${controller.cron} failed`, err);

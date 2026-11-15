@@ -16,6 +16,10 @@ export default defineConfig(async () => {
             WEBHOOK_SECRET: "test-secret",
             ALLOWED_CHAT_ID: "-100123",
             BOT_USERNAME: "spending_test_bot",
+            // Sheets sync is off unless a test turns it on (test/sheets.test.ts), and never sees the real key.
+            GOOGLE_SHEET_ID: "",
+            GOOGLE_SERVICE_ACCOUNT_KEY: "",
+            ADMIN_USER_ID: "",
           },
         },
       }),

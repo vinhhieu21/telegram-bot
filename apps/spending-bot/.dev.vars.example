@@ -1,2 +1,4 @@
 BOT_TOKEN=123456:replace-me
 WEBHOOK_SECRET=replace-with-32-plus-random-characters
+# Google Sheets sync: the service account's JSON key, on one line, in single quotes.
+GOOGLE_SERVICE_ACCOUNT_KEY='{"type":"service_account","client_email":"...","private_key":"..."}'

@@ -14,11 +14,20 @@ BOT_USERNAME = "nth1bot"
 # Workers AI model for expense categories and the monthly commentary. Empty = no LLM;
 # the bot then works exactly as before, minus those two features.
 LLM_MODEL = "@cf/aisingapore/gemma-sea-lion-v4-27b-it"
+# Google Sheet that gets one tab per month (the id in its URL). Empty = no Sheets sync.
+# Needs the GOOGLE_SERVICE_ACCOUNT_KEY secret; see "Google Sheets sync" in README.md.
+GOOGLE_SHEET_ID = "1R_qQAc6deV-0w3Ka7qhtZlA9Jt-MNjKMzYq3aV59eTQ"
+# Telegram user id the bot tells when the Sheet stops updating, and when it recovers.
+# They must have pressed Start in a private chat with the bot. Empty = failures are only logged.
+ADMIN_USER_ID = ""
 
 # Workers AI. Free plan: a daily allowance, after which calls fail (no charge) and the
 # bot falls back: categories are retried by the next daily cron, commentary is skipped.
+# `remote = true` states what wrangler dev does anyway (Workers AI has no local simulator)
+# and silences its warning. Tests stub the binding instead (vitest.config.ts).
 [ai]
 binding = "AI"
+remote = true
 
 [[d1_databases]]
 binding = "DB"

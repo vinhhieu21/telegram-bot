@@ -12,6 +12,7 @@ import { groupSummary, summary } from "./commands/summary";
 import { undo } from "./commands/undo";
 import { upsertMember } from "./db";
 import { DM_NOTICE, GENERIC_ERROR } from "./report/format";
+import { syncSheet, type SheetConfig } from "./sheets/sync";
 import type { Telegram, TgChat, TgMessage, TgUpdate } from "./telegram";
 
 const COMMANDS: Record<string, CommandHandler> = {
@@ -38,6 +39,8 @@ export interface RouterDeps {
   botUsername: string;
   now: Date;
   llm: Llm | null;
+  /** null when GOOGLE_SHEET_ID is empty. */
+  sheet: SheetConfig | null;
   defer: (task: () => Promise<unknown>) => void;
 }
 
@@ -101,11 +104,27 @@ async function handleMessage(message: TgMessage, deps: RouterDeps, edited: boole
   const handler = command && (edited ? EDIT_COMMANDS : COMMANDS)[command.name];
   if (!command || !handler) return;
 
+  const background: Promise<unknown>[] = [];
+  const defer = (task: () => Promise<unknown>) => {
+    const running = task();
+    background.push(running);
+    deps.defer(() => running);
+  };
   try {
     await upsertMember(deps.db, user, deps.now.toISOString());
-    await handler({ db: deps.db, tg: deps.tg, chatId: chat.id, message, user, args: command.args, now: deps.now, llm: deps.llm, defer: deps.defer });
+    await handler({ db: deps.db, tg: deps.tg, chatId: chat.id, message, user, args: command.args, now: deps.now, llm: deps.llm, defer });
   } catch (err) {
     console.error(`command /${command.name}${edited ? " (edited)" : ""} failed`, err);
     await deps.tg.sendMessage(chat.id, GENERIC_ERROR, message.message_id);
+  }
+
+  // Any command can leave a month's tab behind: /add, an edit, /undo, or a member's new name.
+  // Wait for the command's own background work first, so categories are in and a tab is written once.
+  const { sheet } = deps;
+  if (sheet) {
+    deps.defer(async () => {
+      await Promise.allSettled(background);
+      await syncSheet(deps.db, deps.tg, sheet, chat.id);
+    });
   }
 }

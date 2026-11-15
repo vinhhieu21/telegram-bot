@@ -4,6 +4,7 @@ import { writeCommentary, type MonthFacts } from "../ai/commentary";
 import type { Llm } from "../ai/llm";
 import { loadSummary, type SummaryData } from "../commands/summary";
 import { plainDisplayNames, summaryMessage } from "../report/format";
+import { monthSheetLine, type SheetConfig } from "../sheets/sync";
 import type { Telegram } from "../telegram";
 import { currentMonthIct, previousMonth } from "../time";
 
@@ -14,6 +15,7 @@ const CATEGORIZE_PASSES = 3;
  * Runs on the 1st (ICT): summarises the month that just ended. Always sends.
  * With an LLM, first categorises what is left and adds commentary; if that fails the
  * summary still goes out, with a line saying the commentary is unavailable.
+ * With a Google Sheet, ends with a link to the month's tab, written after the categories.
  */
 export async function runMonthlyJob(
   db: D1Database,
@@ -21,6 +23,7 @@ export async function runMonthlyJob(
   chatId: number,
   now: Date,
   llm: Llm | null,
+  sheet: SheetConfig | null = null,
 ): Promise<void> {
   const month = previousMonth(currentMonthIct(now));
 
@@ -36,7 +39,13 @@ export async function runMonthlyJob(
 
   const data = await loadSummary(db, chatId, month);
   const commentary = llm && data.members.length > 0 ? await writeCommentary(llm, monthFacts(data)) : undefined;
-  await tg.sendMessage(chatId, summaryMessage({ ...data, commentary }));
+  const sheetLine = sheet
+    ? await monthSheetLine(db, tg, sheet, chatId, month).catch((err: unknown) => {
+        console.error("monthly sheet line failed", err);
+        return undefined; // the summary still goes out
+      })
+    : undefined;
+  await tg.sendMessage(chatId, summaryMessage({ ...data, commentary, sheetLine }));
 }
 
 export function monthFacts(data: SummaryData): MonthFacts {

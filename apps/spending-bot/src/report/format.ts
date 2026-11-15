@@ -156,8 +156,10 @@ export function summaryMessage(opts: {
   previousCategories?: CategoryTotal[];
   /** undefined = not requested; null = requested but unavailable (said so in the message). */
   commentary?: string | null;
+  /** Last line, from sheetLinkLine. */
+  sheetLine?: string;
 }): string {
-  const { month, members, previousTotal, categories = [], previousCategories = [], commentary } = opts;
+  const { month, members, previousTotal, categories = [], previousCategories = [], commentary, sheetLine } = opts;
   const header = `<b>Tổng kết tháng ${month.month}/${month.year}</b>`;
   if (members.length === 0) return `${header}\nKhông có khoản chi nào.`;
 
@@ -173,6 +175,7 @@ export function summaryMessage(opts: {
 
   if (commentary) lines.push("", "<b>Nhận xét</b>", escapeHtml(commentary));
   else if (commentary === null) lines.push("", "<i>Không tạo được nhận xét tháng này.</i>");
+  if (sheetLine) lines.push("", sheetLine);
   return lines.join("\n");
 }
 
@@ -210,6 +213,27 @@ function categoryLines(categories: CategoryTotal[], previousCategories: Category
     lines.push(`${categoryLabel(c.category)}: ${formatVnd(c.total)}${change === "—" ? "" : ` (${change})`}`);
   }
   return lines;
+}
+
+/** The monthly summary's link to the month's Google Sheets tab, or, with `url` null, why there is none. */
+export function sheetLinkLine(month: YearMonth, url: string | null): string {
+  return url
+    ? `Chi tiết tháng ${month.month}: <a href="${escapeHtml(url)}">Google Sheets</a>`
+    : `<i>Google Sheets chưa cập nhật được tháng ${month.month}, bot sẽ thử lại sau.</i>`;
+}
+
+/** DM to the admin. `since` is the ICT day of the first failure. */
+export function sheetFailingMessage(opts: { since: string; error: string; url: string }): string {
+  return [
+    "<b>Google Sheets không cập nhật được</b>",
+    `Từ ${formatDayMonth(opts.since)}, bot không ghi được chi tiêu vào <a href="${escapeHtml(opts.url)}">bảng tính</a>. ` +
+      "Bot vẫn thử lại sau mỗi lệnh và mỗi tối, và sẽ báo khi cập nhật lại được.",
+    `Lỗi: <code>${escapeHtml(opts.error)}</code>`,
+  ].join("\n");
+}
+
+export function sheetRecoveredMessage(url: string): string {
+  return `<a href="${escapeHtml(url)}">Google Sheets</a> đã cập nhật lại bình thường.`;
 }
 
 export function dailyRecapMessage(opts: {

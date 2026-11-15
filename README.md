@@ -5,7 +5,7 @@ Personal Telegram bots, one folder per service. They share no code. Each app has
 | App | What it does | Runtime | Schedule / trigger |
 |---|---|---|---|
 | [`apps/news-digest`](apps/news-digest) | Daily VN + global news digest, summarised by Gemini, sent to the spending-bot group | Python 3.11 on GitHub Actions, started by a Cloudflare Worker cron | 09:00 ICT daily (`apps/news-digest/trigger`) |
-| [`apps/spending-bot`](apps/spending-bot) | Group spending tracker: `/add`, `/check`, `/summary`, `/undo`, `/daily` | TypeScript on Cloudflare Workers + D1 | Telegram webhook; crons at 21:00 ICT and 09:00 ICT on the 1st |
+| [`apps/spending-bot`](apps/spending-bot) | Group spending tracker: `/add`, `/check`, `/budget`, `/summary`, `/undo`, `/daily`, plus a Google Sheet tab per month | TypeScript on Cloudflare Workers + D1 | Telegram webhook; crons at 21:00 ICT and 09:00 ICT on the 1st |
 
 ## Layout
 

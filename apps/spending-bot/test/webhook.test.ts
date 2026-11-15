@@ -2,7 +2,8 @@ import { createExecutionContext, createScheduledController, waitOnExecutionConte
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { claimBudgetWarning, deleteBudget, setBudget } from "../src/db";
-import worker, { DAILY_CRON, MONTHLY_CRON } from "../src/index";
+import { DAILY_CRON, MONTHLY_CRON } from "../src/crons";
+import worker from "../src/index";
 import { EDIT_UNDONE } from "../src/report/format";
 import type { TgChat, TgMessage, TgUpdate } from "../src/telegram";
 

@@ -1,6 +1,7 @@
 // All SQL lives here. Every expense query filters `deleted_at IS NULL`.
 
 import type { CategoryTotal, ExpenseView, MemberTotal } from "./report/format";
+import type { SheetExpense } from "./sheets/tab";
 import type { TgUser } from "./telegram";
 
 export interface NewExpense {
@@ -42,15 +43,17 @@ export async function upsertMember(db: D1Database, user: TgUser, nowIso: string)
  * (an edit of the message was processed first and saved it).
  */
 export async function insertExpense(db: D1Database, e: NewExpense, nowIso: string): Promise<boolean> {
-  const res = await db
+  // RETURNING, not meta.changes: D1 counts the rows the sheet_sync trigger writes as changes too.
+  const row = await db
     .prepare(
       `INSERT INTO expenses (chat_id, user_id, amount, note, spent_on, created_at, message_id)
        VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT (chat_id, message_id) DO NOTHING`,
+       ON CONFLICT (chat_id, message_id) DO NOTHING
+       RETURNING id`,
     )
     .bind(e.chatId, e.userId, e.amount, e.note, e.spentOn, nowIso, e.messageId)
-    .run();
-  return res.meta.changes === 1;
+    .first<{ id: number }>();
+  return row !== null;
 }
 
 export type EditedExpenseResult = "inserted" | "updated" | "undone" | "stale";
@@ -353,4 +356,143 @@ export async function claimBudgetWarning(
     .bind(month, level, chatId, amount, month, level)
     .run();
   return res.meta.changes === 1;
+}
+
+// Google Sheets sync (src/sheets/sync.ts). Triggers from migration 0005 bump sheet_sync.version
+// whenever a month's expenses (or a name shown in them) change.
+
+/** Months whose tab is behind their data, newest first. */
+export async function outOfDateSheetMonths(db: D1Database, chatId: number, limit: number): Promise<string[]> {
+  const { results } = await db
+    .prepare("SELECT month FROM sheet_sync WHERE chat_id = ? AND version > synced_version ORDER BY month DESC LIMIT ?")
+    .bind(chatId, limit)
+    .all<{ month: string }>();
+  return results.map((r) => r.month);
+}
+
+/**
+ * Leases the month until `leaseUntil` to write its tab, unless it is in sync or another sync holds
+ * an unexpired lease. Returns the version to write, or null when the month is not ours to write.
+ */
+export async function claimSheetMonth(
+  db: D1Database,
+  chatId: number,
+  month: string,
+  leaseUntil: string,
+  nowIso: string,
+): Promise<number | null> {
+  const row = await db
+    .prepare(
+      `UPDATE sheet_sync SET lease_until = ?1
+       WHERE chat_id = ?2 AND month = ?3 AND version > synced_version
+         AND (lease_until IS NULL OR lease_until <= ?4)
+       RETURNING version`,
+    )
+    .bind(leaseUntil, chatId, month, nowIso)
+    .first<{ version: number }>();
+  return row?.version ?? null;
+}
+
+/**
+ * Records that `version` of the month is in tab `tabId`, if we still hold `lease`. Releases the
+ * lease when nothing changed meanwhile; otherwise renews it to `renewedLease` and returns the
+ * version to write next. Returns null when done (or when the lease was lost).
+ */
+export async function finishSheetMonth(
+  db: D1Database,
+  chatId: number,
+  month: string,
+  version: number,
+  tabId: number,
+  lease: string,
+  renewedLease: string,
+): Promise<number | null> {
+  const row = await db
+    .prepare(
+      `UPDATE sheet_sync
+       SET synced_version = ?1, tab_id = ?2, lease_until = CASE WHEN version = ?1 THEN NULL ELSE ?3 END
+       WHERE chat_id = ?4 AND month = ?5 AND lease_until = ?6
+       RETURNING version`,
+    )
+    .bind(version, tabId, renewedLease, chatId, month, lease)
+    .first<{ version: number }>();
+  return row && row.version !== version ? row.version : null;
+}
+
+/** Gives up the month's lease, if still ours, so the next sync can retry right away. */
+export async function releaseSheetMonth(db: D1Database, chatId: number, month: string, lease: string): Promise<void> {
+  await db
+    .prepare("UPDATE sheet_sync SET lease_until = NULL WHERE chat_id = ? AND month = ? AND lease_until = ?")
+    .bind(chatId, month, lease)
+    .run();
+}
+
+/** The month's live expenses with their member's name, in the order they were recorded. */
+export async function sheetMonthExpenses(db: D1Database, chatId: number, from: string, to: string): Promise<SheetExpense[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT e.user_id, m.first_name, m.last_name, e.amount, e.note, e.spent_on, e.category
+       FROM expenses e JOIN members m ON m.user_id = e.user_id
+       WHERE e.chat_id = ? AND e.spent_on BETWEEN ? AND ? AND e.deleted_at IS NULL
+       ORDER BY e.id`,
+    )
+    .bind(chatId, from, to)
+    .all<SheetExpense>();
+  return results;
+}
+
+/** Whether the month's tab is up to date, and its sheetId once written. null if the month has no tab. */
+export async function sheetMonthState(
+  db: D1Database,
+  chatId: number,
+  month: string,
+): Promise<{ inSync: boolean; tabId: number | null } | null> {
+  const row = await db
+    .prepare("SELECT version = synced_version AS in_sync, tab_id FROM sheet_sync WHERE chat_id = ? AND month = ?")
+    .bind(chatId, month)
+    .first<{ in_sync: number; tab_id: number | null }>();
+  return row && { inSync: row.in_sync === 1, tabId: row.tab_id };
+}
+
+/** Notes a failed sync. The first failure since the Sheet was last in sync sets failing_since. */
+export async function recordSheetFailure(db: D1Database, chatId: number, error: string, nowIso: string): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO sheet_health (chat_id, failing_since, last_error) VALUES (?, ?, ?)
+       ON CONFLICT (chat_id) DO UPDATE SET last_error = excluded.last_error`,
+    )
+    .bind(chatId, nowIso, error)
+    .run();
+}
+
+/**
+ * Forgets a past failure once every month is in sync. Returns the cleared failure, or null if
+ * there was none (or some month is still behind).
+ */
+export async function clearSheetFailure(db: D1Database, chatId: number): Promise<{ alerted: boolean } | null> {
+  const row = await db
+    .prepare(
+      `DELETE FROM sheet_health
+       WHERE chat_id = ?1 AND NOT EXISTS (SELECT 1 FROM sheet_sync WHERE chat_id = ?1 AND version > synced_version)
+       RETURNING alerted`,
+    )
+    .bind(chatId)
+    .first<{ alerted: number }>();
+  return row && { alerted: row.alerted === 1 };
+}
+
+/** Marks the current failure as told to the admin. Returns it only to the one caller that should tell. */
+export async function claimSheetAlert(
+  db: D1Database,
+  chatId: number,
+): Promise<{ failing_since: string; last_error: string } | null> {
+  return db
+    .prepare("UPDATE sheet_health SET alerted = 1 WHERE chat_id = ? AND alerted = 0 RETURNING failing_since, last_error")
+    .bind(chatId)
+    .first<{ failing_since: string; last_error: string }>();
+}
+
+/** Undoes claimSheetAlert when the message could not be delivered, so the next night tries again. */
+export async function unclaimSheetAlert(db: D1Database, chatId: number): Promise<void> {
+  await db.prepare("UPDATE sheet_health SET alerted = 0 WHERE chat_id = ?").bind(chatId).run();
 }
