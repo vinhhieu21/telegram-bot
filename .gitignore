@@ -15,3 +15,6 @@ node_modules/
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# spending-bot Mini App build output (scripts/build-web.mjs)
+apps/spending-bot/dist/

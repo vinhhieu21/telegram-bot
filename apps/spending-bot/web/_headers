@@ -1,0 +1,13 @@
+/app/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Content-Security-Policy: default-src 'none'; script-src 'self' https://telegram.org; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'
+
+/app/
+  Cache-Control: no-cache
+
+/app/*.js
+  Cache-Control: public, max-age=31536000, immutable
+
+/app/*.css
+  Cache-Control: public, max-age=31536000, immutable

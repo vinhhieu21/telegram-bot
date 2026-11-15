@@ -307,11 +307,14 @@ export const HELP_MESSAGE = [
   "/groupsummary 9 - tổng kết một tháng của cả nhóm",
   "/undo - xoá khoản chi gần nhất của bạn (trả lời tin nhắn /add để xoá đúng khoản đó)",
   "/daily on - bật/tắt tổng kết lúc 21:00",
+  "/app - xem biểu đồ chi tiêu theo ngày, loại và thành viên",
   "/help - xem hướng dẫn",
 ].join("\n");
 
 export const UNDO_NOT_YOURS =
   "Tin nhắn này không phải khoản chi của bạn nên không xoá gì. Hãy trả lời đúng tin nhắn /add của bạn.";
+export const APP_MESSAGE = "Biểu đồ chi tiêu của nhóm theo ngày, theo loại và theo thành viên.";
+export const APP_BUTTON = "Mở ứng dụng";
 export const DM_NOTICE = "Bot này chỉ hoạt động trong nhóm.";
 export const GENERIC_ERROR = "Có lỗi, thử lại sau";
 

@@ -3,6 +3,7 @@
 A Telegram bot for one friend group.
 Members log spending with `/add`, check their own totals with `/check` and `/summary` (or the whole group's with `/groupcheck` and `/groupsummary`), and get an automatic monthly summary.
 A nightly recap is optional, and so is a Google Sheet with one tab per month.
+`/app` opens a Telegram Mini App with charts of the group's spending.
 It runs on one Cloudflare Worker with D1 storage and costs nothing on the free tiers.
 
 | Command | Example | What it does |
@@ -15,6 +16,7 @@ It runs on one Cloudflare Worker with D1 storage and costs nothing on the free t
 | `/groupsummary [month] [year]` | `/groupsummary 9` | The same for the whole group, ranked by member |
 | `/undo` | reply `/undo` to your `/add` | Soft-deletes the sender's most recent expense, or, sent as a reply to one of their own `/add` messages, that expense |
 | `/daily on\|off` | | Turns the 21:00 ICT nightly recap on or off |
+| `/app` | | A button that opens the Mini App (see below) |
 | `/help` | | Lists the commands |
 
 Amounts: `50k`, `32.5k`, `1tr2` (1,200,000), `1.5tr`, `2m`, `1.250.000`, `50000`.
@@ -28,7 +30,7 @@ The valid range is 1,000đ to 100,000,000đ.
 wrangler.toml            D1 binding "DB", cron triggers, vars
 migrations/*.sql
 src/
-  index.ts               fetch() = webhook, scheduled() = cron
+  index.ts               fetch(): POST = webhook, GET = Mini App; scheduled() = cron
   crons.ts               the cron schedules scheduled() dispatches on
   router.ts              chat filter, /cmd@Bot stripping, dispatch
   telegram.ts            sendMessage / leaveChat over fetch
@@ -45,6 +47,11 @@ src/
   sheets/google.ts       Google Sheets API client (service-account sign-in, retries)
   sheets/tab.ts          one month's expenses -> its tab's cells and layout
   sheets/sync.ts         which month tabs are behind, leases, failure alerts
+  web/auth.ts            Mini App init data check (HMAC with the bot token)
+  web/server.ts          GET /app/ (static page) and GET /api/month
+  web/api.ts             the /api/month response type, shared with the page
+web/                     the Mini App page: main.ts (no framework), style.css, index.html, _headers
+scripts/build-web.mjs    web/ -> dist/web/, with content-hashed file names
 scripts/setup-telegram.mjs   setWebhook + setMyCommands
 test/                    Vitest (unit + integration on local D1)
 ```
@@ -53,8 +60,8 @@ test/                    Vitest (unit + integration on local D1)
 
 ```sh
 npm install
-npm test            # unit + integration (local D1, Telegram API mocked)
-npm run typecheck
+npm test            # builds the page, then unit + integration (local D1, Telegram API mocked)
+npm run typecheck   # the Worker and the page
 npm run types       # regenerate worker-configuration.d.ts after editing wrangler.toml
 ```
 
@@ -142,9 +149,45 @@ Keep notes or charts in a tab of your own instead.
 - Tests talk to a fake Google (`test/sheets.test.ts`), and `vitest.config.ts` blanks the Sheets settings, so tests never see the real key.
   `wrangler dev` reads the key from `.dev.vars` (see `.dev.vars.example`) and writes to the real Sheet, unless you pass `--var GOOGLE_SHEET_ID:<id of a copy>`.
 
+## Mini App
+
+A read-only page inside Telegram that shows one month of the group's spending.
+It has the total with the change from the previous month, a bar chart by day, the breakdown by category and by member, and the list of expenses grouped by day.
+Each member can switch between the whole group, their own spending and any other member's, and step back through earlier months.
+Tapping a day or a category filters the list; a picked category also redraws the daily chart.
+It follows the Telegram theme, light or dark.
+
+The Worker serves the page at `/app/` and its data at `/api/month`.
+Only members of `ALLOWED_CHAT_ID` see the data:
+
+- The page sends the init data Telegram gives it, and the Worker checks its signature against the bot token, so the user id in it is trusted.
+  Init data older than 24 hours is refused, and the page asks to be reopened.
+- The Worker then asks Telegram (`getChatMember`) whether that user is in the group right now.
+  Someone who left or was removed loses access at once.
+- The page is a static file with nothing private in it.
+  It sends no third-party requests other than Telegram's own `telegram-web-app.js`, and its Content-Security-Policy (`web/_headers`) allows nothing else.
+
+Mid-month, the change is measured against the same days of the previous month, for example "so với 1-16/10", not against the whole month.
+
+### Setup
+
+1. In @BotFather, open the bot, then **Bot Settings > Configure Mini App > Enable Mini App**, and set the URL to `https://spending-bot.<subdomain>.workers.dev/app/`.
+   This is the bot's Main Mini App, which `/app` links to as `https://t.me/<bot>?startapp`.
+2. Optional: in **Bot Settings > Menu Button**, set the same URL, so the app also opens from the button next to the message box in a private chat with the bot.
+3. Re-run `npm run setup:telegram` (Deploy, step 8) so `/app` appears in the command menu.
+
+Telegram does not allow Mini App buttons in groups, so `/app` posts a link button instead; Telegram opens the Mini App from it.
+
+### Develop
+
+`wrangler dev` builds the page (`[build]` in `wrangler.toml`) and rebuilds it when `web/` changes.
+Outside Telegram the page has no init data and says to open it from the bot.
+To try it in a browser, open `http://localhost:8787/app/#tgWebAppData=<init data>&tgWebAppVersion=8.0&tgWebAppPlatform=ios`, with init data signed by the `BOT_TOKEN` that `wrangler dev` uses.
+Membership is still checked against the real Telegram, so that token must be the real bot's.
+
 ## Behaviour notes
 
-- Any request without the correct `X-Telegram-Bot-Api-Secret-Token` gets a 401. Once the secret is valid, the Worker always answers 200, so Telegram never retries and creates duplicates. Duplicate updates are also skipped through `processed_updates`, which the daily cron prunes after 7 days.
+- Any POST without the correct `X-Telegram-Bot-Api-Secret-Token` gets a 401 (GET requests are the Mini App, see above). Once the secret is valid, the Worker always answers 200, so Telegram never retries and creates duplicates. Duplicate updates are also skipped through `processed_updates`, which the daily cron prunes after 7 days.
 - Until `ALLOWED_CHAT_ID` is set, the bot only logs chat ids. After that it leaves every other group and answers DMs with a one-line notice.
 - Cron schedules are in UTC: `0 14 * * *` is 21:00 ICT (the daily recap, sent only when it is on and there was spending today). `0 2 1 * *` is 09:00 ICT on the 1st (the monthly summary, always sent).
 - Editing an `/add` message updates that expense (amount, note and date).

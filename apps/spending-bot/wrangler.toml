@@ -2,6 +2,18 @@ name = "spending-bot"
 main = "src/index.ts"
 compatibility_date = "2026-10-01"
 
+# The Mini App page (web/), built into dist/web/ by scripts/build-web.mjs before dev and deploy.
+[build]
+command = "node scripts/build-web.mjs"
+watch_dir = ["web", "src"] # the page also bundles src/ai/categories.ts and src/report/format.ts
+
+# Served at /app/. The Worker runs first for every request: POSTs are the webhook, and the
+# assets are only reached through handleWebRequest (src/web/server.ts).
+[assets]
+directory = "./dist/web"
+binding = "ASSETS"
+run_worker_first = true
+
 [observability]
 enabled = true
 

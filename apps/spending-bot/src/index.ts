@@ -1,4 +1,4 @@
-// fetch() = Telegram webhook, scheduled() = cron jobs.
+// fetch() = Telegram webhook (any POST) and the Mini App (GET /app/, /api/month), scheduled() = cron jobs.
 
 import { createLlm } from "./ai/llm";
 import { DAILY_CRON, MONTHLY_CRON } from "./crons";
@@ -8,10 +8,20 @@ import { runMonthlyJob } from "./jobs/monthly";
 import { handleUpdate } from "./router";
 import { sheetConfig } from "./sheets/sync";
 import { Telegram, type TgUpdate } from "./telegram";
+import { handleWebRequest } from "./web/server";
 
 export default {
   async fetch(request, env, ctx): Promise<Response> {
-    if (request.method !== "POST") return new Response("Not found", { status: 404 });
+    if (request.method !== "POST") {
+      return handleWebRequest(request, {
+        db: env.DB,
+        tg: new Telegram(env.BOT_TOKEN),
+        assets: env.ASSETS,
+        botToken: env.BOT_TOKEN,
+        allowedChatId: parseChatId(env.ALLOWED_CHAT_ID),
+        now: new Date(),
+      });
+    }
     if (!timingSafeEqual(request.headers.get("X-Telegram-Bot-Api-Secret-Token") ?? "", env.WEBHOOK_SECRET)) {
       return new Response("Unauthorized", { status: 401 });
     }

@@ -21,6 +21,7 @@ const COMMANDS = [
   { command: "groupsummary", description: "Tổng kết tháng của cả nhóm: /groupsummary 9" },
   { command: "undo", description: "Xoá khoản chi gần nhất, hoặc trả lời tin /add để xoá khoản đó" },
   { command: "daily", description: "Bật/tắt tổng kết hằng ngày: /daily on" },
+  { command: "app", description: "Mở biểu đồ chi tiêu" },
   { command: "help", description: "Hướng dẫn" },
 ];
 

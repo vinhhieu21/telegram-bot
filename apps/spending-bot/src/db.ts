@@ -1,6 +1,6 @@
 // All SQL lives here. Every expense query filters `deleted_at IS NULL`.
 
-import type { CategoryTotal, ExpenseView, MemberTotal } from "./report/format";
+import type { CategoryTotal, ExpenseView, MemberName, MemberTotal } from "./report/format";
 import type { SheetExpense } from "./sheets/tab";
 import type { TgUser } from "./telegram";
 
@@ -495,4 +495,71 @@ export async function claimSheetAlert(
 /** Undoes claimSheetAlert when the message could not be delivered, so the next night tries again. */
 export async function unclaimSheetAlert(db: D1Database, chatId: number): Promise<void> {
   await db.prepare("UPDATE sheet_health SET alerted = 0 WHERE chat_id = ?").bind(chatId).run();
+}
+
+// --- Mini App (src/web/server.ts) ---
+
+/** The range's live expenses, newest day first, then newest recorded first. */
+export async function rangeExpenses(
+  db: D1Database,
+  chatId: number,
+  from: string,
+  to: string,
+): Promise<{ id: number; user_id: number; amount: number; note: string; spent_on: string; category: string | null }[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT id, user_id, amount, note, spent_on, category FROM expenses
+       WHERE chat_id = ? AND spent_on BETWEEN ? AND ? AND deleted_at IS NULL
+       ORDER BY spent_on DESC, id DESC`,
+    )
+    .bind(chatId, from, to)
+    .all<{ id: number; user_id: number; amount: number; note: string; spent_on: string; category: string | null }>();
+  return results;
+}
+
+/** The range's live expenses totalled per member and category. */
+export async function memberCategoryTotals(
+  db: D1Database,
+  chatId: number,
+  from: string,
+  to: string,
+): Promise<{ user_id: number; category: string | null; total: number }[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT user_id, category, SUM(amount) AS total FROM expenses
+       WHERE chat_id = ? AND spent_on BETWEEN ? AND ? AND deleted_at IS NULL
+       GROUP BY user_id, category`,
+    )
+    .bind(chatId, from, to)
+    .all<{ user_id: number; category: string | null; total: number }>();
+  return results;
+}
+
+/** Members with a live expense in the range, plus `alsoUserId` when known. */
+export async function rangeMembers(
+  db: D1Database,
+  chatId: number,
+  from: string,
+  to: string,
+  alsoUserId: number,
+): Promise<MemberName[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT user_id, first_name, last_name FROM members
+       WHERE user_id = ?4
+          OR user_id IN (SELECT user_id FROM expenses
+                         WHERE chat_id = ?1 AND spent_on BETWEEN ?2 AND ?3 AND deleted_at IS NULL)`,
+    )
+    .bind(chatId, from, to, alsoUserId)
+    .all<MemberName>();
+  return results;
+}
+
+/** The date of the chat's oldest live expense, or null when there is none. */
+export async function firstExpenseDate(db: D1Database, chatId: number): Promise<string | null> {
+  const row = await db
+    .prepare("SELECT MIN(spent_on) AS first FROM expenses WHERE chat_id = ? AND deleted_at IS NULL")
+    .bind(chatId)
+    .first<{ first: string | null }>();
+  return row?.first ?? null;
 }

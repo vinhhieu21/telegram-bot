@@ -3,6 +3,7 @@
 
 import type { Llm } from "./ai/llm";
 import { add, editAdd } from "./commands/add";
+import { app } from "./commands/app";
 import { budget } from "./commands/budget";
 import { check, groupCheck } from "./commands/check";
 import type { CommandHandler } from "./commands/context";
@@ -18,6 +19,7 @@ import type { Telegram, TgChat, TgMessage, TgUpdate } from "./telegram";
 
 const COMMANDS: Record<string, CommandHandler> = {
   add,
+  app,
   budget,
   check,
   groupcheck: groupCheck,
@@ -116,7 +118,7 @@ async function handleMessage(message: TgMessage, deps: RouterDeps, edited: boole
   };
   try {
     await upsertMember(deps.db, user, deps.now.toISOString());
-    await handler({ db: deps.db, tg: deps.tg, chatId: chat.id, message, user, args: command.args, now: deps.now, llm: deps.llm, defer });
+    await handler({ db: deps.db, tg: deps.tg, chatId: chat.id, message, user, args: command.args, now: deps.now, botUsername: deps.botUsername, llm: deps.llm, defer });
   } catch (err) {
     console.error(`command /${command.name}${edited ? " (edited)" : ""} failed`, err);
     await deps.tg.sendMessage(chat.id, GENERIC_ERROR, message.message_id);

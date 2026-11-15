@@ -10,6 +10,8 @@ export interface CommandContext {
   /** Text after the command name, untrimmed. */
   args: string;
   now: Date;
+  /** Without "@". */
+  botUsername: string;
   /** null when LLM_MODEL is empty. */
   llm: Llm | null;
   /** Runs `task` after the reply is sent (ctx.waitUntil); errors are logged, never shown. */
