@@ -563,3 +563,18 @@ export async function firstExpenseDate(db: D1Database, chatId: number): Promise<
     .first<{ first: string | null }>();
   return row?.first ?? null;
 }
+
+export async function getBotState(db: D1Database, key: string): Promise<string | null> {
+  const row = await db.prepare("SELECT value FROM bot_state WHERE key = ?").bind(key).first<{ value: string }>();
+  return row?.value ?? null;
+}
+
+export async function setBotState(db: D1Database, key: string, value: string, nowIso: string): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO bot_state (key, value, updated_at) VALUES (?, ?, ?)
+       ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+    )
+    .bind(key, value, nowIso)
+    .run();
+}

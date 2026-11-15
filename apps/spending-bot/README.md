@@ -52,7 +52,7 @@ src/
   web/api.ts             the /api/month response type, shared with the page
 web/                     the Mini App page: main.ts (no framework), style.css, index.html, _headers
 scripts/build-web.mjs    web/ -> dist/web/, with content-hashed file names
-scripts/setup-telegram.mjs   setWebhook + setMyCommands
+scripts/setup-telegram.mjs   setWebhook
 test/                    Vitest (unit + integration on local D1)
 ```
 
@@ -74,14 +74,15 @@ npm run types       # regenerate worker-configuration.d.ts after editing wrangle
 5. `npx wrangler secret put BOT_TOKEN` and `npx wrangler secret put WEBHOOK_SECRET` (use 32+ random characters, e.g. `openssl rand -hex 32`).
 6. Set `BOT_USERNAME` in `wrangler.toml` (without the `@`). Leave `ALLOWED_CHAT_ID` empty for now.
 7. `npm run deploy`
-8. Register the webhook and command menu:
+8. Register the webhook:
    ```sh
    BOT_TOKEN=... WEBHOOK_SECRET=... WORKER_URL=https://spending-bot.<subdomain>.workers.dev npm run setup:telegram
    ```
-   After upgrading an existing bot, re-run this once.
    Telegram only delivers message edits to webhooks registered with `edited_message`.
+   The "/" command menu needs no step: after each update the Worker checks the menu in `src/commands/menu.ts` against what it last registered (table `bot_state`), and re-registers it when it changed.
 9. Run `npx wrangler tail`, add the bot to the group, and send `/help`. The log prints the group's `chat_id`, which is a negative number.
-10. Put that id in `ALLOWED_CHAT_ID` in `wrangler.toml` and run `npm run deploy` again. Re-run step 8 with `ALLOWED_CHAT_ID=...` to scope the command menu to the group.
+10. Put that id in `ALLOWED_CHAT_ID` in `wrangler.toml` and run `npm run deploy` again.
+    The next message in the group moves the command menu from all groups to that group only.
 
 Test this in a private group with two accounts before you add the bot to the real group.
 
@@ -174,7 +175,6 @@ Mid-month, the change is measured against the same days of the previous month, f
 1. In @BotFather, open the bot, then **Bot Settings > Configure Mini App > Enable Mini App**, and set the URL to `https://spending-bot.<subdomain>.workers.dev/app/`.
    This is the bot's Main Mini App, which `/app` links to as `https://t.me/<bot>?startapp`.
 2. Optional: in **Bot Settings > Menu Button**, set the same URL, so the app also opens from the button next to the message box in a private chat with the bot.
-3. Re-run `npm run setup:telegram` (Deploy, step 8) so `/app` appears in the command menu.
 
 Telegram does not allow Mini App buttons in groups, so `/app` posts a link button instead; Telegram opens the Mini App from it.
 

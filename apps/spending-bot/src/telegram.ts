@@ -90,6 +90,10 @@ export class Telegram {
     }
   }
 
+  async setMyCommands(commands: BotCommand[], scope: BotCommandScope): Promise<boolean> {
+    return this.call("setMyCommands", { commands, scope });
+  }
+
   private async call(method: string, body: unknown): Promise<boolean> {
     try {
       const res = await fetch(`https://api.telegram.org/bot${this.token}/${method}`, {
@@ -106,3 +110,10 @@ export class Telegram {
     return false;
   }
 }
+
+export interface BotCommand {
+  command: string;
+  description: string;
+}
+
+export type BotCommandScope = { type: "all_group_chats" } | { type: "chat"; chat_id: number };

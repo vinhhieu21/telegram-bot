@@ -1,6 +1,7 @@
 // fetch() = Telegram webhook (any POST) and the Mini App (GET /app/, /api/month), scheduled() = cron jobs.
 
 import { createLlm } from "./ai/llm";
+import { syncCommandMenu } from "./commands/menu";
 import { DAILY_CRON, MONTHLY_CRON } from "./crons";
 import { markUpdateProcessed } from "./db";
 import { runDailyJob } from "./jobs/daily";
@@ -33,10 +34,14 @@ export default {
       if (!(await markUpdateProcessed(env.DB, update.update_id, now.toISOString()))) {
         return new Response("ok");
       }
+      const tg = new Telegram(env.BOT_TOKEN);
+      const allowedChatId = parseChatId(env.ALLOWED_CHAT_ID);
+      // In the background, alongside the update: one D1 read, and a Telegram call only when the menu changed.
+      ctx.waitUntil(syncCommandMenu(env.DB, tg, allowedChatId, now).catch((err: unknown) => console.error("command menu sync failed", err)));
       await handleUpdate(update, {
         db: env.DB,
-        tg: new Telegram(env.BOT_TOKEN),
-        allowedChatId: parseChatId(env.ALLOWED_CHAT_ID),
+        tg,
+        allowedChatId,
         botUsername: env.BOT_USERNAME,
         now,
         llm: createLlm(env),

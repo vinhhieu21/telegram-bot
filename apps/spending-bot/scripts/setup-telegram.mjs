@@ -1,29 +1,14 @@
-// One-off setup: registers the webhook and the command menu.
+// One-off setup: registers the webhook.
 //
-//   BOT_TOKEN=... WEBHOOK_SECRET=... WORKER_URL=https://spending-bot.<you>.workers.dev \
-//   [ALLOWED_CHAT_ID=-100...] node scripts/setup-telegram.mjs
+//   BOT_TOKEN=... WEBHOOK_SECRET=... WORKER_URL=https://spending-bot.<you>.workers.dev node scripts/setup-telegram.mjs
 //
-// Without ALLOWED_CHAT_ID the command menu is registered for all group chats;
-// re-run with it once the group id is known to scope the menu to that group.
+// The command menu is not set here: the Worker registers it itself (src/commands/menu.ts).
 
-const { BOT_TOKEN, WEBHOOK_SECRET, WORKER_URL, ALLOWED_CHAT_ID } = process.env;
+const { BOT_TOKEN, WEBHOOK_SECRET, WORKER_URL } = process.env;
 if (!BOT_TOKEN || !WEBHOOK_SECRET || !WORKER_URL) {
   console.error("BOT_TOKEN, WEBHOOK_SECRET and WORKER_URL are required");
   process.exit(1);
 }
-
-const COMMANDS = [
-  { command: "add", description: "Ghi khoản chi: /add 50k cafe sáng" },
-  { command: "check", description: "Tổng chi của bạn từ đầu tháng" },
-  { command: "groupcheck", description: "Tổng chi của cả nhóm từ đầu tháng" },
-  { command: "budget", description: "Ngân sách tháng của nhóm: /budget 5tr" },
-  { command: "summary", description: "Tổng kết tháng của bạn: /summary 9" },
-  { command: "groupsummary", description: "Tổng kết tháng của cả nhóm: /groupsummary 9" },
-  { command: "undo", description: "Xoá khoản chi gần nhất, hoặc trả lời tin /add để xoá khoản đó" },
-  { command: "daily", description: "Bật/tắt tổng kết hằng ngày: /daily on" },
-  { command: "app", description: "Mở biểu đồ chi tiêu" },
-  { command: "help", description: "Hướng dẫn" },
-];
 
 async function call(method, body) {
   const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
@@ -43,7 +28,3 @@ await call("setWebhook", {
   drop_pending_updates: true,
 });
 
-const scope = ALLOWED_CHAT_ID
-  ? { type: "chat", chat_id: Number(ALLOWED_CHAT_ID) }
-  : { type: "all_group_chats" };
-await call("setMyCommands", { commands: COMMANDS, scope });
